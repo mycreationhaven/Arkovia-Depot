@@ -26,7 +26,7 @@
     if(!list.length){grid.innerHTML='<div class="empty">No marketplace listings match those filters.</div>';return;}
     grid.innerHTML=list.map(l=>`<article class="card marketplace-card"><div class="market-card-top"><span class="asset-type-badge">${esc(l.assetType)}</span><span class="seller-name">by ${esc(l.sellerName)}</span></div><h3>${esc(l.assetName)}</h3><div class="price">${esc(l.price)} ${esc(currency)}</div><div class="actions">${sessionAuthenticated?`<button class="buy-button" data-id="${esc(l.listingId)}">Buy now</button>`:'<button class="market-signin secondary" type="button">Sign in to buy</button>'}</div></article>`).join('');
     grid.querySelectorAll('.buy-button').forEach(b=>b.addEventListener('click',()=>{if(typeof buyListing==='function')buyListing(b.dataset.id,b);}));
-    grid.querySelectorAll('.market-signin').forEach(b=>b.addEventListener('click',()=>{const p=$('linkPanel');p?.classList.remove('hidden');p?.scrollIntoView({behavior:'smooth',block:'center'});$('accountInput')?.focus();}));
+    grid.querySelectorAll('.market-signin').forEach(b=>b.addEventListener('click',()=>openWalletLink()));
   }
   async function refreshMarket(){
     await refreshSessionState();
@@ -39,13 +39,30 @@
     const grid=$('exchangeGrid');if(!grid)return;
     $('exchangeCount').textContent=`${stocks.length} securit${stocks.length===1?'y':'ies'}`;
     if(!stocks.length){grid.innerHTML='<div class="empty">No ARKOVIA securities are listed right now.</div>';return;}
-    grid.innerHTML=stocks.map(s=>{const ticker=s.ticker??s.Ticker??'—',name=s.name??s.Name??ticker,price=s.price??s.Price??'—',available=s.sharesAvailable??s.SharesAvailable??'—',outstanding=s.sharesOutstanding??s.SharesOutstanding??'—';return `<article class="card exchange-card"><div class="market-card-top"><span class="asset-type-badge">${esc(ticker)}</span><span class="seller-name">${esc(available)} available</span></div><h3>${esc(name)}</h3><div class="price">${esc(price)} ${esc(currency)}</div><div class="meta">${esc(outstanding)} shares outstanding</div><div class="actions"><button class="exchange-open" data-ticker="${esc(ticker)}">View / buy</button></div></article>`;}).join('');
-    grid.querySelectorAll('.exchange-open').forEach(b=>b.addEventListener('click',()=>{if(typeof openStock==='function')openStock(b.dataset.ticker);}));
+    grid.innerHTML=stocks.map(s=>{const ticker=s.ticker??s.Ticker??'—',name=s.name??s.Name??ticker,price=s.price??s.Price??'—',available=s.sharesAvailable??s.SharesAvailable??'—',outstanding=s.sharesOutstanding??s.SharesOutstanding??'—';return `<article class="card exchange-card"><div class="market-card-top"><span class="asset-type-badge">${esc(ticker)}</span><span class="seller-name">${esc(available)} available</span></div><h3>${esc(name)}</h3><div class="price">${esc(price)} ${esc(currency)}</div><div class="meta">${esc(outstanding)} shares outstanding</div><div class="actions"><button class="exchange-open${sessionAuthenticated?'':' secondary'}" data-ticker="${esc(ticker)}">${sessionAuthenticated?'View / buy':'Sign in to buy'}</button></div></article>`;}).join('');
+    grid.querySelectorAll('.exchange-open').forEach(b=>b.addEventListener('click',()=>{if(!sessionAuthenticated){openWalletLink();return;}if(typeof openStock==='function')openStock(b.dataset.ticker);}));
   }
   async function refreshExchange(){try{const r=await fetch('/api/stocks',{credentials:'same-origin'});if(!r.ok)throw new Error();const d=await r.json();renderExchange(d.stocks||d.Stocks||[]);}catch{const grid=$('exchangeGrid');if(grid)grid.innerHTML='<div class="empty">The ARKOVIA Exchange is temporarily unavailable.</div>';}}
+  function openWalletLink(){const p=$('linkPanel');p?.classList.remove('hidden');p?.scrollIntoView({behavior:'smooth',block:'center'});$('accountInput')?.focus();}
+  function enhanceWikiButtons(root=document){
+    root.querySelectorAll?.('.pet-actions a[target="_blank"]').forEach(link=>{
+      if(!/wiki/i.test(`${link.textContent} ${link.href}`))return;
+      link.textContent='Wiki';
+      link.classList.remove('secondary');
+      link.classList.add('wiki-button');
+      link.setAttribute('aria-label','Open official Terraria Wiki');
+      link.setAttribute('title','Open official Terraria Wiki');
+    });
+  }
+  function watchDynamicCards(){
+    enhanceWikiButtons();
+    const target=$('menagerieCatalog')||document.body;
+    const observer=new MutationObserver(mutations=>mutations.forEach(m=>m.addedNodes.forEach(node=>{if(node.nodeType===1){enhanceWikiButtons(node);if(node.matches?.('.pet-actions'))enhanceWikiButtons(node.parentElement||node);}})));
+    observer.observe(target,{childList:true,subtree:true});
+  }
   function initNav(){const toggle=$('mobileNavToggle'),nav=$('mainNav');if(!toggle||!nav)return;toggle.addEventListener('click',()=>{const open=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!open));nav.classList.toggle('open',!open);});nav.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{toggle.setAttribute('aria-expanded','false');nav.classList.remove('open');}));}
   async function init(){
-    initNav(); await Promise.all([refreshCurrency(),refreshSessionState()]);
+    initNav();watchDynamicCards();await Promise.all([refreshCurrency(),refreshSessionState()]);
     $('marketSearch')?.addEventListener('input',renderMarket);$('marketTypeFilter')?.addEventListener('change',renderMarket);$('marketSort')?.addEventListener('change',renderMarket);
     $('refreshButton')?.addEventListener('click',()=>setTimeout(refreshMarket,100));
     await Promise.all([refreshMarket(),refreshExchange()]);
